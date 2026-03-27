@@ -1,0 +1,263 @@
+---
+title: "Import strategies and troubleshooting"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Import strategies and troubleshooting}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+`rayforestr` wraps `rayimport` and related RayCloudTools commands through Docker.
+In practice, raw point-cloud import can behave in several ways:
+
+- import succeeds normally
+- import prints warnings but still creates a usable `*_raycloud.ply`
+- import fails to create a usable raycloud
+- import becomes practical only when an existing raycloud is reused
+
+This vignette explains the import strategies available in `rayforestr` and how
+to handle common issues.
+
+# The three reuse modes
+
+`ray_import()` supports three practical reuse strategies through
+`reuse_existing`:
+
+- `"never"`  
+  Always attempt a fresh import.
+
+- `"prefer"`  
+  Use an existing raycloud immediately.
+
+- `"fallback"`  
+  Attempt a fresh import first, but fall back to an existing raycloud when
+  needed.
+
+The pipeline wrappers expose the same idea through
+`reuse_existing_import`.
+
+# Typical import patterns
+
+## 1. Fresh import only
+
+Use this when you want to force a new import.
+
+```{r eval = FALSE}
+res <- ray_import(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  project_root = "D:/packageR",
+  out_dir = "D:/packageR/runs/import_never/step2_rayimport",
+  reuse_existing = "never",
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+## 2. Prefer an existing raycloud
+
+Use this when you already trust an existing raycloud and do not want to rerun
+raw import.
+
+```{r eval = FALSE}
+res <- ray_import(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  project_root = "D:/packageR",
+  out_dir = "D:/packageR/runs/import_prefer/step2_rayimport",
+  existing_raycloud = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  reuse_existing = "prefer",
+  dry_run = FALSE,
+  echo = TRUE
+)
+
+res
+```
+
+## 3. Try import first, then fall back
+
+Use this when you want a fresh import if possible, but still want the workflow
+to continue if an existing raycloud is available.
+
+```{r eval = FALSE}
+res <- ray_import(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  project_root = "D:/packageR",
+  out_dir = "D:/packageR/runs/import_fallback/step2_rayimport",
+  reuse_existing = "fallback",
+  search_sibling_raycloud = TRUE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+
+res
+```
+
+# Wrapper-level import fallback
+
+The same strategy can be used directly in the wrappers.
+
+## Single-tree wrapper
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  input_mode = "point_cloud",
+  project_root = "D:/packageR",
+  run_name = "single_tree_import_fallback",
+  reuse_existing_import = "fallback",
+  search_sibling_raycloud = TRUE,
+  use_colour = FALSE,
+  steps = c("import", "terrain", "trees"),
+  resume = FALSE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+## Forest wrapper
+
+```{r eval = FALSE}
+res <- ray_pipeline_forest(
+  input_file = "D:/packageR/data/plot/plot01.ply",
+  input_mode = "point_cloud",
+  project_root = "D:/packageR",
+  run_name = "forest_import_fallback",
+  reuse_existing_import = "fallback",
+  search_sibling_raycloud = TRUE,
+  use_colour = FALSE,
+  steps = c("import", "terrain", "trees", "split"),
+  resume = FALSE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+# Understanding noisy imports
+
+In some cases, RayCloudTools may print warnings such as:
+
+- no times provided
+- suspicious large coordinates
+- zero-intensity non-returns
+
+This does **not always mean** that no output raycloud was created.
+
+A practical pattern observed in real workflows is:
+
+1. `rayimport` prints warnings or an error message
+2. a `*_raycloud.ply` is still written
+3. downstream steps such as terrain and trees can still run successfully
+
+Because of this, the most important criterion is not only the console message,
+but whether a usable `*_raycloud.ply` exists after the step.
+
+# Sibling raycloud discovery
+
+When `search_sibling_raycloud = TRUE`, `ray_import()` can look for a raycloud
+next to the input point cloud using the expected naming pattern, for example:
+
+- input: `spruce_4.ply`
+- sibling raycloud: `spruce_4_raycloud.ply`
+
+This is especially useful when:
+
+- the raw `.ply` is difficult to import
+- a raycloud was created previously outside the current run
+- you want reproducible recovery without manually editing the workflow
+
+# Starting from a raycloud directly
+
+If you already know a valid raycloud exists, the cleanest approach is often to
+skip point-cloud import entirely and start from:
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode = "raycloud",
+  project_root = "D:/packageR",
+  run_name = "single_tree_from_raycloud",
+  use_colour = FALSE,
+  steps = c("terrain", "trees", "smooth", "info", "mesh"),
+  resume = FALSE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+This is often the most reliable path for single-tree processing.
+
+# Common problems and responses
+
+## Problem: Docker is not available
+
+Check Docker first:
+
+```{r eval = FALSE}
+ray_check_docker()
+```
+
+If this fails, fix Docker before running the pipeline.
+
+## Problem: Import says it failed
+
+Check whether a raycloud actually exists:
+
+```{r eval = FALSE}
+list.files("D:/packageR/runs/example/step2_rayimport", full.names = TRUE)
+```
+
+If a usable raycloud exists, continue from that file or use fallback mode.
+
+## Problem: You already have a raycloud
+
+Do not force a raw import unless you need to.
+
+Use either:
+
+- `input_mode = "raycloud"`
+- `reuse_existing = "prefer"`
+
+## Problem: You want recovery but not silent skipping
+
+Use:
+
+```{r eval = FALSE}
+reuse_existing = "fallback"
+```
+
+This tries fresh import first, then reuses an existing raycloud only when needed.
+
+## Problem: You want a completely fresh run
+
+Use:
+
+```{r eval = FALSE}
+reuse_existing = "never"
+```
+
+and choose a fresh run directory.
+
+# Recommended decision guide
+
+A practical decision order is:
+
+1. If you already trust a raycloud, start from `input_mode = "raycloud"`.
+2. If you want to test a fresh import but still want robustness, use fallback.
+3. If you want strict import behavior for debugging, use `reuse_existing = "never"`.
+
+# Notes
+
+- For difficult single-tree inputs, an existing raycloud is often the most
+  reliable starting point.
+- Console warnings during import do not automatically mean that no usable
+  output was created.
+- `rayforestr` is designed to support practical workflows by allowing reuse and
+  fallback strategies instead of forcing unnecessary failure.

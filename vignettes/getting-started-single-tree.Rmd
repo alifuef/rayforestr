@@ -1,0 +1,279 @@
+---
+title: "Getting started and single-tree workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started and single-tree workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+`rayforestr` provides a stage-based interface around RayCloudTools and TreeTools
+through Docker. The package supports:
+
+- step-level functions such as `ray_import()`, `ray_terrain()`, `ray_trees()`,
+  `ray_smooth()`, `ray_info()`, and `ray_mesh()`
+- high-level wrappers such as `ray_pipeline_single_tree()`
+- resumable workflows
+- multiple entry modes:
+  - `point_cloud`
+  - `raycloud`
+  - `treefile`
+  - `smoothed_treefile`
+
+This vignette shows the recommended single-tree workflow.
+
+# Prerequisites
+
+Before running pipelines:
+
+1. Install Docker and confirm that Docker is available from R.
+2. Pull or build the required image.
+3. Set the package image option.
+
+```{r eval = FALSE}
+library(rayforestr)
+
+ray_check_docker()
+
+options(
+  rayforestr.raycloud_image = "ghcr.io/csiro-robotics/raycloudtools:latest"
+)
+```
+
+In many setups, the same Docker image provides both RayCloudTools and TreeTools.
+`rayforestr` will reuse the RayCloudTools image for TreeTools commands when no
+separate TreeTools image is configured.
+
+# Recommended project structure
+
+A simple project layout is:
+
+```text
+project_root/
+  data/
+    single_tree/
+      spruce_4.ply
+      spruce_4_raycloud.ply
+  runs/
+```
+
+Use a project root outside the package source folder.
+
+# Single-tree workflow from an existing raycloud
+
+This is often the most reliable starting point for single-tree processing.
+
+```{r eval = FALSE}
+library(rayforestr)
+
+project_root <- "D:/packageR"
+raycloud_file <- "D:/packageR/data/single_tree/spruce_4_raycloud.ply"
+
+res <- ray_pipeline_single_tree(
+  input_file   = raycloud_file,
+  input_mode   = "raycloud",
+  project_root = project_root,
+  run_name     = "single_tree_from_raycloud",
+  use_colour   = FALSE,
+  steps        = c("terrain", "trees", "smooth", "info", "mesh"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+
+res
+```
+
+Expected outputs are written into stage folders such as:
+
+- `step4_terrain`
+- `step5_trees`
+- `step7_smooth`
+- `step8_info`
+- `step9_mesh`
+
+# Single-tree workflow from a raw point cloud
+
+If you want to begin from a raw point cloud, use `input_mode = "point_cloud"`.
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4.ply",
+  input_mode   = "point_cloud",
+  project_root = "D:/packageR",
+  run_name     = "single_tree_from_point_cloud",
+  use_colour   = FALSE,
+  steps        = c("import", "terrain", "trees"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Import reuse modes
+
+For difficult point-cloud inputs, `ray_import()` and the wrappers support three
+practical modes:
+
+- `reuse_existing = "never"`  
+  Always attempt a fresh import.
+
+- `reuse_existing = "prefer"`  
+  Use an existing raycloud immediately.
+
+- `reuse_existing = "fallback"`  
+  Attempt a fresh import first, but fall back to an existing raycloud if needed.
+
+### Example: explicit reuse of an existing raycloud
+
+```{r eval = FALSE}
+res_import <- ray_import(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  project_root = "D:/packageR",
+  out_dir = "D:/packageR/runs/import_prefer/step2_rayimport",
+  existing_raycloud = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  reuse_existing = "prefer",
+  dry_run = FALSE,
+  echo = TRUE
+)
+
+res_import
+```
+
+### Example: wrapper fallback to a sibling raycloud
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file = "D:/packageR/data/single_tree/spruce_4.ply",
+  input_mode = "point_cloud",
+  project_root = "D:/packageR",
+  run_name = "single_tree_import_fallback",
+  reuse_existing_import = "fallback",
+  search_sibling_raycloud = TRUE,
+  use_colour = FALSE,
+  steps = c("import", "terrain", "trees"),
+  resume = FALSE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+In practice, RayCloudTools may sometimes print import warnings while still
+creating a usable `*_raycloud.ply`. In other cases, `rayforestr` can continue by
+reusing an existing sibling raycloud when fallback is enabled.
+
+# Starting from an existing treefile
+
+If you already have a treefile, you can continue with later steps only.
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/runs/example/step5_trees/spruce_4_raycloud_trees.txt",
+  input_mode   = "treefile",
+  project_root = "D:/packageR",
+  run_name     = "single_tree_from_treefile",
+  steps        = c("smooth", "info", "mesh"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+# Starting from an existing smoothed treefile
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/runs/example/step7_smooth/spruce_4_raycloud_trees_smoothed.txt",
+  input_mode   = "smoothed_treefile",
+  project_root = "D:/packageR",
+  run_name     = "single_tree_from_smoothed",
+  steps        = c("info", "mesh"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+# Running individual step functions
+
+Advanced users can call the step functions directly.
+
+```{r eval = FALSE}
+s2 <- ray_terrain(
+  raycloud_file = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/stepwise_demo/step4_terrain",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+
+s3 <- ray_trees(
+  raycloud_file = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  terrain_mesh  = s2$outputs$terrain_mesh,
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/stepwise_demo/step5_trees",
+  args_trees    = "--height_min 0.2 --distance_limit 3 --max_diameter 3 --gravity_factor 0.1",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+```
+
+# Resume and selective steps
+
+The wrapper can run only selected steps and resume later.
+
+```{r eval = FALSE}
+res_part1 <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "single_tree_resume_demo",
+  steps        = c("terrain", "trees"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+
+res_part2 <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "single_tree_resume_demo",
+  steps        = c("smooth", "info", "mesh"),
+  resume       = TRUE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+# Interpreting outputs
+
+`ray_pipeline_single_tree()` returns a `ray_result` object with key output paths,
+for example:
+
+- `raycloud_file`
+- `terrain_mesh`
+- `segmented_ply`
+- `treefile`
+- `smoothed_treefile`
+- `info_file`
+- `mesh_file`
+
+This makes it easier to continue programmatically from later stages.
+
+# Notes
+
+- For single-tree work, starting from an existing raycloud is often the most
+  reliable route.
+- Some raw point clouds may trigger import warnings or degenerate imports.
+- `rayforestr` supports practical recovery through existing-raycloud reuse and
+  fallback workflows.

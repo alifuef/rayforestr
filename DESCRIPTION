@@ -1,0 +1,26 @@
+Package: rayforestr
+Type: Package
+Title: RayCloudTools and TreeTools Pipelines for Forestry in R
+Version: 0.0.8
+Authors@R: c(
+    person(given = "Muhammad", family = "Ali",
+           email = "your_email@example.com",
+           role = c("aut", "cre")),
+    person(given = "OpenAI", family = "Assistant", role = c("ctb"))
+    )
+Description: Orchestrates RayCloudTools and TreeTools through Docker and
+    provides R-native parsers and analysis helpers for RayExtract treefiles,
+    including tree smoothing, treeinfo integration, QSM-like conversion,
+    volume calculation, center-of-gravity estimation, tree metrics,
+    CSV export, and simple plotting helpers.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    utils,
+    tools,
+    stats
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

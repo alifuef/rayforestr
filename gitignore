@@ -1,0 +1,58 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session data files
+.RData
+.Ruserdata
+
+# RStudio files
+.Rproj.user/
+*.Rproj
+
+# Build and check outputs
+*.tar.gz
+*.Rcheck/
+check/
+revdep/
+
+# Documentation outputs
+Meta/
+man/*.html
+doc/
+docs/
+
+# pkgdown cache
+pkgdown/
+
+# Vignette build products
+vignettes/*.html
+vignettes/*.utf8.md
+
+# Testthat snapshots
+tests/testthat/_snaps/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python / notebook leftovers if used occasionally
+__pycache__/
+.ipynb_checkpoints/
+
+# Large local processing outputs
+runs/
+output/
+cache/
+tmp/
+temp/
+
+# Local data folders you may want to keep outside Git
+data-raw/
+local-data/

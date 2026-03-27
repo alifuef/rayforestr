@@ -1,0 +1,322 @@
+---
+title: "Advanced and programmatic use"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Advanced and programmatic use}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+This vignette is for users who want more control than the high-level wrappers
+alone provide.
+
+Topics covered:
+
+- calling step functions directly
+- understanding `ray_result`
+- using selective steps and resume
+- path helpers and input-mode helpers
+- practical batch-style workflows
+
+For most users, the main entry points remain:
+
+- `ray_pipeline_single_tree()`
+- `ray_pipeline_forest()`
+
+# Images and Docker setup
+
+Set the Docker image option before running pipelines.
+
+```{r eval = FALSE}
+library(rayforestr)
+
+options(
+  rayforestr.raycloud_image = "ghcr.io/csiro-robotics/raycloudtools:latest"
+)
+
+ray_check_docker()
+```
+
+In many setups, the same image also contains TreeTools commands such as
+`treesmooth`, `treeinfo`, and `treemesh`.
+
+# The `ray_result` object
+
+Most step functions and wrappers return a `ray_result` object.
+
+Typical fields include:
+
+- `step`
+- `status`
+- `input`
+- `outputs`
+- `log_file`
+- `details`
+
+Example:
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "programmatic_demo",
+  steps        = c("terrain", "trees"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+
+res
+res$status
+res$outputs
+```
+
+`ray_result` makes it easier to continue programmatically from later stages.
+
+# Calling step functions directly
+
+Advanced users may prefer to control each stage manually.
+
+## Terrain
+
+```{r eval = FALSE}
+s2 <- ray_terrain(
+  raycloud_file = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/stepwise_demo/step4_terrain",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+
+s2$outputs$terrain_mesh
+```
+
+## Trees
+
+```{r eval = FALSE}
+s3 <- ray_trees(
+  raycloud_file = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  terrain_mesh  = s2$outputs$terrain_mesh,
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/stepwise_demo/step5_trees",
+  args_trees    = "--height_min 0.2 --distance_limit 3 --max_diameter 3 --gravity_factor 0.1",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+
+s3$outputs$treefile
+```
+
+## Smooth
+
+```{r eval = FALSE}
+s4 <- ray_smooth(
+  treefile     = s3$outputs$treefile,
+  project_root = "D:/packageR",
+  out_dir      = "D:/packageR/runs/stepwise_demo/step7_smooth",
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Info
+
+```{r eval = FALSE}
+s5 <- ray_info(
+  treefile     = s4$outputs$smoothed_treefile,
+  project_root = "D:/packageR",
+  out_dir      = "D:/packageR/runs/stepwise_demo/step8_info",
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Mesh
+
+```{r eval = FALSE}
+s6 <- ray_mesh(
+  treefile     = s4$outputs$smoothed_treefile,
+  project_root = "D:/packageR",
+  out_dir      = "D:/packageR/runs/stepwise_demo/step9_mesh",
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+# Selective steps in the wrappers
+
+The wrappers support selective execution through `steps`.
+
+```{r eval = FALSE}
+res <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "selective_demo",
+  steps        = c("terrain", "trees", "smooth"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+This is useful when you want only part of the full workflow.
+
+# Resume behavior
+
+A common advanced pattern is to split processing into multiple runs.
+
+## First run
+
+```{r eval = FALSE}
+res_part1 <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "resume_demo",
+  steps        = c("terrain", "trees"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Second run
+
+```{r eval = FALSE}
+res_part2 <- ray_pipeline_single_tree(
+  input_file   = "D:/packageR/data/single_tree/spruce_4_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "resume_demo",
+  steps        = c("smooth", "info", "mesh"),
+  resume       = TRUE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+The second call reuses the existing stage outputs in the same run directory.
+
+# Input modes programmatically
+
+The wrappers support multiple input modes.
+
+```{r eval = FALSE}
+ray_resolve_input_mode(NULL, "x/spruce_4.ply")
+ray_resolve_input_mode(NULL, "x/spruce_4_raycloud.ply")
+ray_resolve_input_mode(NULL, "x/spruce_4_raycloud_trees.txt")
+ray_resolve_input_mode(NULL, "x/spruce_4_raycloud_trees_smoothed.txt")
+```
+
+Typical choices are:
+
+- `point_cloud`
+- `raycloud`
+- `treefile`
+- `smoothed_treefile`
+
+# Path helpers
+
+`rayforestr` includes helpers for creating consistent run folders.
+
+```{r eval = FALSE}
+paths <- ray_resolve_paths(
+  input_file   = "D:/packageR/data/single_tree/spruce_4.ply",
+  project_root = "D:/packageR",
+  run_name     = "path_demo"
+)
+
+paths$out_root
+paths$dirs
+```
+
+This is useful for advanced scripts or custom orchestration.
+
+# Step metadata helpers
+
+For programmatic workflows, it can be useful to inspect helper metadata.
+
+```{r eval = FALSE}
+ray_step_inputs()
+ray_step_input_labels()
+ray_result_statuses()
+```
+
+These can help when building custom wrappers or batch summaries.
+
+# Batch-style workflow pattern
+
+For many files, a simple pattern is:
+
+1. create a job table
+2. iterate over rows
+3. call a wrapper
+4. store result objects
+
+Example:
+
+```{r eval = FALSE}
+files <- c(
+  "D:/packageR/data/single_tree/tree1_raycloud.ply",
+  "D:/packageR/data/single_tree/tree2_raycloud.ply"
+)
+
+results <- lapply(seq_along(files), function(i) {
+  ray_pipeline_single_tree(
+    input_file   = files[[i]],
+    input_mode   = "raycloud",
+    project_root = "D:/packageR",
+    run_name     = paste0("batch_tree_", i),
+    steps        = c("terrain", "trees", "smooth", "info", "mesh"),
+    resume       = FALSE,
+    dry_run      = FALSE,
+    echo         = FALSE
+  )
+})
+
+results
+```
+
+A similar pattern works for `ray_pipeline_forest()`.
+
+# Reading outputs downstream
+
+Programmatic use often continues with readers and summary functions.
+
+```{r eval = FALSE}
+tree_df <- ray_read_treefile(
+  "D:/packageR/runs/example/step5_trees/spruce_4_raycloud_trees.txt"
+)
+
+info_df <- ray_read_treeinfo(
+  "D:/packageR/runs/example/step8_info/spruce_4_raycloud_trees_smoothed_info.txt"
+)
+```
+
+You can then use metric and volume helpers on the returned data.
+
+# Practical tips
+
+- Use `input_mode = "raycloud"` when a valid raycloud already exists.
+- Use `steps` to avoid unnecessary reruns.
+- Use `resume = TRUE` for multi-stage workflows.
+- Keep one run name per logical analysis so stage reuse remains clear.
+- Inspect `res$outputs` instead of reconstructing output paths manually.
+
+# Notes
+
+- Step functions are useful for advanced control and debugging.
+- Wrappers are still recommended for most routine analyses.
+- The stage-based design makes it easier to pause, inspect, and continue
+  workflows without relying on copy-heavy pipeline logic.

@@ -1,0 +1,254 @@
+---
+title: "Forest and plot workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Forest and plot workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+`rayforestr` supports forest- and plot-level processing through
+`ray_pipeline_forest()`. The wrapper organizes outputs into stage folders and
+supports selective steps, resume, and multiple entry modes.
+
+Typical forest/plot stages are:
+
+- `import`
+- `colour`
+- `terrain`
+- `trees`
+- `split`
+- `smooth`
+- `info`
+- `mesh`
+
+This vignette shows recommended ways to use the forest wrapper.
+
+# Prerequisites
+
+Before running the forest workflow:
+
+1. Install Docker and confirm that Docker is available from R.
+2. Set the main image option.
+3. Choose a project root outside the package source folder.
+
+```{r eval = FALSE}
+library(rayforestr)
+
+ray_check_docker()
+
+options(
+  rayforestr.raycloud_image = "ghcr.io/csiro-robotics/raycloudtools:latest"
+)
+```
+
+In many setups, the same image also contains `treesmooth`, `treeinfo`, and
+`treemesh`, so no separate TreeTools image is required.
+
+# Recommended project structure
+
+```text
+project_root/
+  data/
+    plot/
+      plot01.ply
+      plot01_raycloud.ply
+  runs/
+```
+
+# Forest workflow from an existing raycloud
+
+For many workflows, starting from an existing raycloud is the most practical
+entry point.
+
+```{r eval = FALSE}
+res <- ray_pipeline_forest(
+  input_file   = "D:/packageR/data/plot/plot01_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "forest_from_raycloud",
+  use_colour   = FALSE,
+  steps        = c("terrain", "trees", "split", "smooth", "info", "mesh"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+
+res
+```
+
+Expected stage folders include:
+
+- `step4_terrain`
+- `step5_trees`
+- `step6_split`
+- `step7_smooth`
+- `step8_info`
+- `step9_mesh`
+
+# Forest workflow from a raw point cloud
+
+```{r eval = FALSE}
+res <- ray_pipeline_forest(
+  input_file   = "D:/packageR/data/plot/plot01.ply",
+  input_mode   = "point_cloud",
+  project_root = "D:/packageR",
+  run_name     = "forest_from_point_cloud",
+  use_colour   = FALSE,
+  steps        = c("import", "terrain", "trees", "split"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Import reuse modes
+
+For raw point clouds, the wrapper supports the same import reuse logic as the
+single-tree workflow:
+
+- `reuse_existing_import = "never"`
+- `reuse_existing_import = "prefer"`
+- `reuse_existing_import = "fallback"`
+
+### Example: fallback to a sibling raycloud
+
+```{r eval = FALSE}
+res <- ray_pipeline_forest(
+  input_file = "D:/packageR/data/plot/plot01.ply",
+  input_mode = "point_cloud",
+  project_root = "D:/packageR",
+  run_name = "forest_import_fallback",
+  reuse_existing_import = "fallback",
+  search_sibling_raycloud = TRUE,
+  use_colour = FALSE,
+  steps = c("import", "terrain", "trees", "split"),
+  resume = FALSE,
+  dry_run = FALSE,
+  echo = TRUE
+)
+```
+
+This is useful when raw import is noisy or unreliable but a valid
+`plot01_raycloud.ply` already exists.
+
+# Understanding the split stage
+
+The `split` stage typically separates the segmented cloud into multiple PLY
+files, for example by tree identifier or segment label.
+
+The forest wrapper returns both:
+
+- `split_segmented`
+- `split_segmented_dir`
+
+The directory path is usually the most useful output for downstream inspection.
+
+```{r eval = FALSE}
+res$outputs$split_segmented_dir
+list.files(res$outputs$split_segmented_dir, full.names = TRUE)
+```
+
+# Resume and selective steps
+
+A common workflow is to run early processing first, inspect results, and then
+continue later.
+
+## First run: terrain, trees, split
+
+```{r eval = FALSE}
+res_part1 <- ray_pipeline_forest(
+  input_file   = "D:/packageR/data/plot/plot01_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "forest_resume_demo",
+  use_colour   = FALSE,
+  steps        = c("terrain", "trees", "split"),
+  resume       = FALSE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+## Second run: smooth, info, mesh
+
+```{r eval = FALSE}
+res_part2 <- ray_pipeline_forest(
+  input_file   = "D:/packageR/data/plot/plot01_raycloud.ply",
+  input_mode   = "raycloud",
+  project_root = "D:/packageR",
+  run_name     = "forest_resume_demo",
+  use_colour   = FALSE,
+  steps        = c("smooth", "info", "mesh"),
+  resume       = TRUE,
+  dry_run      = FALSE,
+  echo         = TRUE
+)
+```
+
+# Running individual step functions
+
+Advanced users can run steps directly.
+
+```{r eval = FALSE}
+s2 <- ray_terrain(
+  raycloud_file = "D:/packageR/data/plot/plot01_raycloud.ply",
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/forest_stepwise/step4_terrain",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+
+s3 <- ray_trees(
+  raycloud_file = "D:/packageR/data/plot/plot01_raycloud.ply",
+  terrain_mesh  = s2$outputs$terrain_mesh,
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/forest_stepwise/step5_trees",
+  args_trees    = "--height_min 0.2 --distance_limit 3 --max_diameter 3 --gravity_factor 0.1",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+
+s4 <- ray_split_segmented(
+  segmented_ply = s3$outputs$segmented_ply,
+  project_root  = "D:/packageR",
+  out_dir       = "D:/packageR/runs/forest_stepwise/step6_split",
+  dry_run       = FALSE,
+  echo          = TRUE
+)
+```
+
+# Inspecting outputs
+
+The forest wrapper returns a `ray_result` object with key paths such as:
+
+- `raycloud_file`
+- `terrain_mesh`
+- `segmented_ply`
+- `treefile`
+- `split_segmented`
+- `split_segmented_dir`
+- `smoothed_treefile`
+- `info_file`
+- `mesh_file`
+
+This makes it easier to continue from later stages or to integrate the workflow
+into larger scripts.
+
+# Notes
+
+- For plot and forest workflows, starting from an existing raycloud is often
+  the most stable route.
+- Use `split_segmented_dir` to inspect the outputs of the split stage.
+- Use `resume = TRUE` to continue later stages without re-running everything.
+- Some raw imports may still produce warnings; fallback import modes can make
+  the workflow more robust when an existing raycloud is available.

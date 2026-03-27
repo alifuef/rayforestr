@@ -1,0 +1,90 @@
+template:
+  bootstrap: 5
+
+home:
+  title: rayforestr
+  description: Stage-based RayCloudTools and TreeTools workflows for forestry in R
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [github]
+  components:
+    intro:
+      text: Home
+      href: index.html
+    reference:
+      text: Reference
+      href: reference/index.html
+    articles:
+      text: Vignettes
+      menu:
+        - text: Getting started and single-tree workflow
+          href: articles/getting-started-single-tree.html
+        - text: Forest and plot workflow
+          href: articles/forest-plot-workflow.html
+        - text: Import strategies and troubleshooting
+          href: articles/import-strategies-troubleshooting.html
+        - text: Advanced and programmatic use
+          href: articles/advanced-programmatic-use.html
+    news:
+      text: News
+      href: news/index.html
+    github:
+      icon: fab fa-github
+      href: https://github.com/your-username/rayforestr
+
+reference:
+  - title: Main wrappers
+    contents:
+      - ray_pipeline_single_tree
+      - ray_pipeline_forest
+      - ray_pipeline_corrected
+
+  - title: Core execution steps
+    contents:
+      - ray_import
+      - ray_colour
+      - ray_terrain
+      - ray_trees
+      - ray_split_segmented
+      - ray_smooth
+      - ray_info
+      - ray_mesh
+
+  - title: Reading and summaries
+    contents:
+      - ray_read_treefile
+      - ray_read_treefile_single
+      - ray_read_treeinfo
+      - ray_tree_metrics
+      - ray_compute_volume
+      - ray_compute_volume_dir
+      - ray_merchantable_volume
+      - ray_treeinfo_summary
+
+  - title: Docker, paths, and helpers
+    contents:
+      - ray_check_docker
+      - ray_resolve_input_mode
+      - ray_resolve_paths
+      - ray_step_inputs
+      - ray_step_input_labels
+      - ray_result_statuses
+
+  - title: Advanced and batch helpers
+    contents:
+      - ray_batch
+      - ray_make_jobs
+      - ray_collect_logs
+      - ray_resume
+      - new_ray_result
+
+articles:
+  - title: Workflow guides
+    navbar: Workflow guides
+    contents:
+      - getting-started-single-tree
+      - forest-plot-workflow
+      - import-strategies-troubleshooting
+      - advanced-programmatic-use
