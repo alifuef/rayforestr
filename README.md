@@ -1,3 +1,5 @@
+<img src="man/figures/logo.png" align="right" height="180" />
+
 # rayforestr
 
 `rayforestr` is an R package for stage-based forestry workflows built around
