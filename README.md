@@ -1,4 +1,4 @@
-<img src="man/figures/logo.png" align="right" height="180" />
+<img src="man/figures/logo.png" align="right" height="250" />
 
 # rayforestr
 
